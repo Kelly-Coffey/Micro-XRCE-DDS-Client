@@ -122,7 +122,7 @@ int main(int args, char** argv)
     uxr_create_input_reliable_stream(&session, input_reliable_stream_buffer, BUFFER_SIZE, STREAM_HISTORY);
 
     // Create entities
-    uxrObjectId participant_id = uxr_object_id(0x01, UXR_PARTICIPANT_ID);
+    participant_id = uxr_object_id(0x01, UXR_PARTICIPANT_ID);
     const char* participant_xml = "<dds>"
                                       "<participant>"
                                           "<rtps>"
