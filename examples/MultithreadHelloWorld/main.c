@@ -37,6 +37,15 @@ void create_publisher(void * args)
     const char* publisher_xml = "";
     uint16_t publisher_req = uxr_buffer_create_publisher_xml(&session, reliable_out, publisher_id, participant_id, publisher_xml, UXR_REPLACE);
 
+    uint16_t requests[] = {publisher_req};
+    uint8_t status[sizeof(requests)/2];
+
+    if(!uxr_run_session_until_all_status(&session, 1000, requests, status, sizeof(status)))
+    {
+        printf("Error at create entities: participant: %i topic: %i\n", status[0], status[1]);
+        return 1;
+    }
+
     uxrObjectId datawriter_id = uxr_object_id(0x01, UXR_DATAWRITER_ID);
     const char* datawriter_xml = "<dds>"
                                      "<data_writer>"
@@ -48,6 +57,15 @@ void create_publisher(void * args)
                                      "</data_writer>"
                                  "</dds>";
     uint16_t datawriter_req = uxr_buffer_create_datawriter_xml(&session, reliable_out, datawriter_id, publisher_id, datawriter_xml, UXR_REPLACE);
+    
+    uint16_t requests2[] = {datawriter_req};
+    uint8_t status2[sizeof(requests)/2];
+
+    if(!uxr_run_session_until_all_status(&session, 1000, requests2, status2, sizeof(status2)))
+    {
+        printf("Error at create entities: participant: %i topic: %i\n", status2[0], status2[1]);
+        return 1;
+    }
 
      // Write topics
     HelloWorld topic;
@@ -73,13 +91,12 @@ int main(int args, char** argv)
     // CLI
     if(3 > args || 0 == atoi(argv[2]))
     {
-        printf("usage: program [-h | --help] | ip port [<max_topics>]\n");
+        printf("usage: program [-h | --help] | ip port\n");
         return 0;
     }
 
     char* ip = argv[1];
     char* port = argv[2];
-    uint32_t max_topics = (args == 4) ? (uint32_t)atoi(argv[3]) : UINT32_MAX;
 
     // Transport
     uxrUDPTransport transport;
@@ -99,7 +116,7 @@ int main(int args, char** argv)
 
     // Streams
     uint8_t output_reliable_stream_buffer[BUFFER_SIZE];
-    uxrStreamId reliable_out = uxr_create_output_reliable_stream(&session, output_reliable_stream_buffer, BUFFER_SIZE, STREAM_HISTORY);
+    reliable_out = uxr_create_output_reliable_stream(&session, output_reliable_stream_buffer, BUFFER_SIZE, STREAM_HISTORY);
 
     uint8_t input_reliable_stream_buffer[BUFFER_SIZE];
     uxr_create_input_reliable_stream(&session, input_reliable_stream_buffer, BUFFER_SIZE, STREAM_HISTORY);
@@ -123,30 +140,30 @@ int main(int args, char** argv)
                                 "</topic>"
                             "</dds>";
     uint16_t topic_req = uxr_buffer_create_topic_xml(&session, reliable_out, topic_id, participant_id, topic_xml, UXR_REPLACE);
-
     
-    // Send create entities message and wait its status
-    uint8_t status[2];
     uint16_t requests[] = {participant_req, topic_req};
+    uint8_t status[sizeof(requests)/2];
     if(!uxr_run_session_until_all_status(&session, 1000, requests, status, sizeof(status)))
     {
         printf("Error at create entities: participant: %i topic: %i\n", status[0], status[1]);
         return 1;
     }
 
-    pthread_t tid[10];
+    pthread_t tid[1];
     for (size_t i = 0; i < sizeof(tid)/sizeof(pthread_t); i++)
     {
         pthread_create(&tid[i], NULL, create_publisher, &i);
     }
+
+    while(1){}
     for (size_t i = 0; i < sizeof(tid)/sizeof(pthread_t); i++)
     {
         pthread_join(&tid[i], NULL);
     }
 
     // Delete resources
-    uxr_delete_session(&session);
-    uxr_close_udp_transport(&transport);
+    // uxr_delete_session(&session);
+    // uxr_close_udp_transport(&transport);
 
     return 0;
 }
