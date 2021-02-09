@@ -24,7 +24,8 @@ extern "C"
 #include <uxr/client/profile/transport/serial/serial_protocol.h>
 #include <uxr/client/config.h>
 #include <uxr/client/visibility.h>
-#include <uxr/client/transport.h>
+
+struct uxrSerialPlatform;
 
 typedef struct uxrSerialTransport
 {
@@ -32,7 +33,7 @@ typedef struct uxrSerialTransport
     uxrSerialIO serial_io;
     uint8_t remote_addr;
     uxrCommunication comm;
-    struct uxrSerialPlatform platform;
+    struct uxrSerialPlatform* platform;
 
 } uxrSerialTransport;
 
@@ -51,6 +52,7 @@ typedef struct uxrSerialTransport
  */
 UXRDLLAPI bool uxr_init_serial_transport(
         uxrSerialTransport* transport,
+        struct uxrSerialPlatform* platform,
         const int fd,
         uint8_t remote_addr,
         uint8_t local_addr);

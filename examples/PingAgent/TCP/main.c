@@ -30,8 +30,9 @@ int main(int argc, char** argv)
     char* port = argv[2];
 
     uxrTCPTransport transport;
+    uxrTCPPlatform tcp_platform;
 
-    if (!uxr_init_tcp_transport(&transport, UXR_IPv4, ip, port))
+    if (!uxr_init_tcp_transport(&transport, &tcp_platform, UXR_IPv4, ip, port))
     {
         printf("Error during transport creation\n");
         return 1;

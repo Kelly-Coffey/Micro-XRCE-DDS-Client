@@ -30,8 +30,9 @@ int main(int argc, char** argv)
     char* port = argv[2];
 
     uxrUDPTransport transport;
+    uxrUDPPlatform udp_platform;
 
-    if (!uxr_init_udp_transport(&transport, UXR_IPv4, ip, port))
+    if (!uxr_init_udp_transport(&transport, &udp_platform, UXR_IPv4, ip, port))
     {
         printf("Error during transport creation\n");
         return 1;
