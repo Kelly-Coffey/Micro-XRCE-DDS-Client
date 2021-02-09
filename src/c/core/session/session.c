@@ -16,6 +16,7 @@
 #include "stream/seq_num_internal.h"
 #include "../log/log_internal.h"
 #include "../../util/time_internal.h"
+#include "../../profile/multithread/multithread_internal.h"
 
 #define CREATE_SESSION_MAX_MSG_SIZE (MAX_HEADER_SIZE + SUBHEADER_SIZE + CREATE_CLIENT_PAYLOAD_SIZE)
 #define DELETE_SESSION_MAX_MSG_SIZE (MAX_HEADER_SIZE + SUBHEADER_SIZE + DELETE_CLIENT_PAYLOAD_SIZE)
@@ -63,6 +64,8 @@ static bool run_session_until_sync(uxrSession* session, int timeout);
 
 void uxr_init_session(uxrSession* session, uxrCommunication* comm, uint32_t key)
 {
+    UXR_LOCK_SESSION;
+
     session->comm = comm;
 
     session->request_list = NULL;
@@ -81,36 +84,58 @@ void uxr_init_session(uxrSession* session, uxrCommunication* comm, uint32_t key)
 
     uxr_init_session_info(&session->info, 0x81, key);
     uxr_init_stream_storage(&session->streams);
+
+    UXR_UNLOCK_SESSION;
 }
 
 void uxr_set_status_callback(uxrSession* session, uxrOnStatusFunc on_status_func, void* args)
 {
+    UXR_LOCK_SESSION;
+
     session->on_status = on_status_func;
     session->on_status_args = args;
+
+    UXR_UNLOCK_SESSION;
 }
 
 void uxr_set_topic_callback(uxrSession* session, uxrOnTopicFunc on_topic_func, void* args)
 {
+    UXR_LOCK_SESSION;
+
     session->on_topic = on_topic_func;
     session->on_topic_args = args;
+
+    UXR_UNLOCK_SESSION;
 }
 
 void uxr_set_time_callback(uxrSession* session, uxrOnTimeFunc on_time_func, void* args)
 {
+    UXR_LOCK_SESSION;
+
     session->on_time = on_time_func;
     session->on_time_args = args;
+
+    UXR_UNLOCK_SESSION;
 }
 
 void uxr_set_request_callback(uxrSession* session, uxrOnRequestFunc on_request_func, void* args)
 {
+    UXR_LOCK_SESSION;
+
     session->on_request = on_request_func;
     session->on_request_args = args;
+
+    UXR_UNLOCK_SESSION;
 }
 
 void uxr_set_reply_callback(uxrSession* session, uxrOnReplyFunc on_reply_func, void* args)
 {
+    UXR_LOCK_SESSION;
+
     session->on_reply = on_reply_func;
     session->on_reply_args = args;
+
+    UXR_UNLOCK_SESSION;
 }
 
 #ifdef PERFORMANCE_TESTING
@@ -139,11 +164,18 @@ bool uxr_create_session_retries(uxrSession* session, int retries)
 
 bool uxr_create_session(uxrSession* session)
 {
-    return uxr_create_session_retries(session, UXR_CONFIG_MAX_SESSION_CONNECTION_ATTEMPTS);
+    UXR_LOCK_SESSION;
+
+    bool ret = uxr_create_session_retries(session, UXR_CONFIG_MAX_SESSION_CONNECTION_ATTEMPTS);
+
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 bool uxr_delete_session(uxrSession* session)
 {
+    UXR_LOCK_SESSION;
+
     uint8_t delete_session_buffer[DELETE_SESSION_MAX_MSG_SIZE];
     ucdrBuffer ub;
     ucdr_init_buffer_origin_offset(&ub, delete_session_buffer, DELETE_SESSION_MAX_MSG_SIZE, 0u, uxr_session_header_offset(&session->info));
@@ -152,33 +184,58 @@ bool uxr_delete_session(uxrSession* session)
     uxr_stamp_session_header(&session->info, 0, 0, ub.init);
 
     bool received = wait_session_status(session, delete_session_buffer, ucdr_buffer_length(&ub), UXR_CONFIG_MAX_SESSION_CONNECTION_ATTEMPTS);
-    return received && UXR_STATUS_OK == session->info.last_requested_status;
+    bool ret = received && UXR_STATUS_OK == session->info.last_requested_status;
+
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 uxrStreamId uxr_create_output_best_effort_stream(uxrSession* session, uint8_t* buffer, size_t size)
 {
+    UXR_LOCK_SESSION;
+
     uint8_t header_offset = uxr_session_header_offset(&session->info);
-    return uxr_add_output_best_effort_buffer(&session->streams, buffer, size, header_offset);
+    uxrStreamId ret = uxr_add_output_best_effort_buffer(&session->streams, buffer, size, header_offset);
+
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 uxrStreamId uxr_create_output_reliable_stream(uxrSession* session, uint8_t* buffer, size_t size, uint16_t history)
 {
+    UXR_LOCK_SESSION;
+
     uint8_t header_offset = uxr_session_header_offset(&session->info);
-    return uxr_add_output_reliable_buffer(&session->streams, buffer, size, history, header_offset);
+    uxrStreamId ret = uxr_add_output_reliable_buffer(&session->streams, buffer, size, history, header_offset);
+
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 uxrStreamId uxr_create_input_best_effort_stream(uxrSession* session)
 {
-    return uxr_add_input_best_effort_buffer(&session->streams);
+    UXR_LOCK_SESSION;
+
+    uxrStreamId ret = uxr_add_input_best_effort_buffer(&session->streams);
+
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 uxrStreamId uxr_create_input_reliable_stream(uxrSession* session, uint8_t* buffer, size_t size, uint16_t history)
 {
-    return uxr_add_input_reliable_buffer(&session->streams, buffer, size, history, on_get_fragmentation_info);
+    UXR_LOCK_SESSION;
+
+    uxrStreamId ret =  uxr_add_input_reliable_buffer(&session->streams, buffer, size, history, on_get_fragmentation_info);
+
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 bool uxr_run_session_time(uxrSession* session, int timeout_ms)
 {
+    UXR_LOCK_SESSION;
+
     uxr_flash_output_streams(session);
 
     bool timeout = false;
@@ -187,11 +244,16 @@ bool uxr_run_session_time(uxrSession* session, int timeout_ms)
          timeout = !listen_message_reliably(session, timeout_ms);
     }
 
-    return uxr_output_streams_confirmed(&session->streams);
+    bool ret = uxr_output_streams_confirmed(&session->streams);
+    
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 bool uxr_run_session_timeout(uxrSession* session, int timeout_ms)
 {
+    UXR_LOCK_SESSION;
+
     int64_t start_timestamp = uxr_millis();
     int remaining_time = timeout_ms;
 
@@ -202,11 +264,17 @@ bool uxr_run_session_timeout(uxrSession* session, int timeout_ms)
         listen_message_reliably(session, remaining_time);
         remaining_time = timeout_ms - (int)(uxr_millis() - start_timestamp);
     }
-    return uxr_output_streams_confirmed(&session->streams);
+
+    bool ret = uxr_output_streams_confirmed(&session->streams);
+    
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 bool uxr_run_session_until_data(uxrSession* session, int timeout_ms)
 {
+    UXR_LOCK_SESSION;
+
     int64_t start_timestamp = uxr_millis();
     int remaining_time = timeout_ms;
 
@@ -221,18 +289,27 @@ bool uxr_run_session_until_data(uxrSession* session, int timeout_ms)
         }
         remaining_time = timeout_ms - (int)(uxr_millis() - start_timestamp);
     }
+
+    UXR_UNLOCK_SESSION;
     return session->on_data_flag;
 }
 
 bool uxr_run_session_until_timeout(uxrSession* session, int timeout_ms)
 {
+    UXR_LOCK_SESSION;
+
     uxr_flash_output_streams(session);
 
-    return listen_message_reliably(session, timeout_ms);
+    bool ret = listen_message_reliably(session, timeout_ms);
+    
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 bool uxr_run_session_until_confirm_delivery(uxrSession* session, int timeout_ms)
 {
+    UXR_LOCK_SESSION;
+
     uxr_flash_output_streams(session);
 
     bool timeout = false;
@@ -241,11 +318,16 @@ bool uxr_run_session_until_confirm_delivery(uxrSession* session, int timeout_ms)
         timeout = !listen_message_reliably(session, timeout_ms);
     }
 
-    return uxr_output_streams_confirmed(&session->streams);
+    bool ret = uxr_output_streams_confirmed(&session->streams);
+
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 bool uxr_run_session_until_all_status(uxrSession* session, int timeout_ms, const uint16_t* request_list, uint8_t* status_list, size_t list_size)
 {
+    UXR_LOCK_SESSION;
+
     uxr_flash_output_streams(session);
 
     for(unsigned i = 0; i < list_size; ++i)
@@ -278,11 +360,14 @@ bool uxr_run_session_until_all_status(uxrSession* session, int timeout_ms, const
         status_ok = status_list[i] == UXR_STATUS_OK || status_list[i] == UXR_STATUS_OK_MATCHED;
     }
 
+    UXR_UNLOCK_SESSION;
     return status_ok;
 }
 
 bool uxr_run_session_until_one_status(uxrSession* session, int timeout_ms, const uint16_t* request_list, uint8_t* status_list, size_t list_size)
 {
+    UXR_LOCK_SESSION;
+
     uxr_flash_output_streams(session);
 
     for(unsigned i = 0; i < list_size; ++i)
@@ -308,11 +393,14 @@ bool uxr_run_session_until_one_status(uxrSession* session, int timeout_ms, const
 
     session->request_status_list_size = 0;
 
+    UXR_UNLOCK_SESSION;
     return status_confirmed;
 }
 
 bool uxr_sync_session(uxrSession* session, int time)
 {
+    UXR_LOCK_SESSION;
+
     uint8_t timestamp_buffer[TIMESTAMP_MAX_MSG_SIZE];
     ucdrBuffer ub;
     ucdr_init_buffer_origin_offset(&ub, timestamp_buffer, sizeof(timestamp_buffer), 0u, uxr_session_header_offset(&session->info));
@@ -326,7 +414,11 @@ bool uxr_sync_session(uxrSession* session, int time)
 
     uxr_stamp_session_header(&session->info, 0, 0, ub.init);
     send_message(session, timestamp_buffer, ucdr_buffer_length(&ub));
-    return run_session_until_sync(session, time);
+
+    bool ret = run_session_until_sync(session, time);
+
+    UXR_UNLOCK_SESSION;
+    return ret;
 }
 
 int64_t uxr_epoch_millis(uxrSession* session)
